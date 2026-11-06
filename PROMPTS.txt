@@ -1,0 +1,77 @@
+THE SUPPLIER BILL CHECKER — the exact prompts from the episode, word for word.
+Paste them into your AI assistant in order. Prompt 1 builds the first version; prompts 2 and 3
+are the fixes from the episode — they exist because the first two versions were wrong in ways
+worth understanding before you let any tool argue with your suppliers for you.
+
+================================ PROMPT 1 ================================
+
+Build me a single HTML file I can open in my browser, no internet, no account, that checks my
+supplier bills for me.
+
+What it's for: I run a two-bay auto repair shop. I buy parts and supplies from a handful of
+suppliers at prices we agreed on, and every month a stack of invoices shows up. I don't have
+time to check them line by line, so I mostly just pay them.
+
+Data in: two pastes.
+1) My agreed price list: CSV with columns Supplier, Item Code, Description, Unit, Agreed Price —
+   what each supplier agreed to charge me per unit.
+2) The month's bills: CSV with columns Invoice, Date, Supplier, Item Code, Description, Qty,
+   Unit Price, Line Total — every line of every supplier invoice.
+
+What I want out: tell me if anything on these bills is wrong — wrong prices, bad math, anything
+that doesn't look right — and what it adds up to, so I know whether checking bills is even worth
+my time.
+
+================================ PROMPT 2 ================================
+
+The first version missed almost everything and flagged the wrong things. Rebuild the checking
+rules, and bring in the third file this job actually needs:
+
+3) My receiving log: CSV with columns Date, Supplier, Item Code, Qty, Reference — what actually
+   arrived at the shop, signed for at the door.
+
+- Match lines by SUPPLIER and ITEM CODE, normalized — trim it, ignore case, ignore spaces and
+  dashes. A description typed in capitals is still the same part.
+- Check every line's price against MY agreed price for that item, not against the bill's own
+  arithmetic. A bill that agrees with itself can still be wrong about everything.
+- Check every line's quantity against what the receiving log says arrived. Billing me for
+  twenty-four when eighteen showed up is a finding, not a rounding difference.
+- A credit memo is money owed to me, not an error. Keep it visible and subtract it.
+- A price BELOW the agreed price is good news. Label it, don't flag it.
+
+================================ PROMPT 3 ================================
+
+Now make it trustworthy enough to send to a supplier with a straight face.
+
+- All money in whole cents, one written-down rounding rule (round half up). No floating-point
+  dollars anywhere, in any total.
+- The billing period is typed into the page. The machine clock gets no vote: the same three
+  files must produce the same audit on any computer, on any day. A line dated outside the
+  period is listed, not judged.
+- Receipts ACCUMULATE: twelve wipers delivered twice is twenty-four wipers, and a quantity
+  check that only remembers the latest delivery slip is defamation. Consume the received
+  balance line by line, in date order.
+- A duplicate is the same GOODS at the same PRICES from the same supplier within a window of
+  days — whatever the invoice number says. The same bill resubmitted under a new number is
+  flagged whole, as one finding, and its lines are checked against nothing else.
+- A small price difference inside a tolerance I set is labeled and left alone. I pick the
+  tolerance; zero means zero.
+- A line the page can't read — a date that isn't a date, a quantity that isn't a number, a
+  printed line total that disagrees with its own quantity times price — is refused out loud
+  with its row number and the reason. Never guessed at, never skipped in silence.
+- The page audits itself on every run: bill lines in = clean + flagged + billed-twice +
+  check-by-hand + credits + outside-the-period + refused; receiving rows in = counted +
+  unmatched + refused; and the disputed total must re-add from its four causes AND from the
+  per-supplier table, to the cent. If any audit fails, or too many rows were refused, print
+  DO NOT TRUST THIS AUDIT across the top, say why, and withhold every dispute note — a wrong
+  accusation is worse than a missed one.
+- For each supplier with findings, draft a dispute note I can actually send: every disputed
+  line named by invoice and date, every dollar traced, the credits acknowledged.
+
+=========================== THE SECOND OPINION ===========================
+
+The episode also used an independent checker — the same rules implemented again in Python by a
+separate session, sharing no code with the page — run on the same three files. checker.py is in
+this folder. That second opinion is what proved the page and the rules agree: 209 paired runs
+over generated shops, 27,143 compared values, zero disagreements. When two implementations
+disagree, one of them is wrong, and it is worth finding out which before you accuse a supplier.

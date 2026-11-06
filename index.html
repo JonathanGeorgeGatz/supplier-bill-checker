@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Supplier Bill Checker</title>
+<style>
+:root{--ink:#27241F;--dim:#6E6A62;--line:#DED8CC;--paper:#FAF8F3;--panel:#FFFFFF;--acc:#5B4232;--sig:#4C6FAF;--warn:#A4312A;--ok:#2F6B4F;
+--mono:"SF Mono",Menlo,Consolas,monospace;--sans:-apple-system,"Segoe UI",Inter,Helvetica,Arial,sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);font:16px/1.5 var(--sans);padding:26px 30px 60px}
+h1{font-size:26px;letter-spacing:-.01em}
+h1 small{font-size:14px;color:var(--dim);font-weight:400;margin-left:10px}
+.sub{color:var(--dim);font-size:14px;margin:4px 0 16px}
+#banner{display:none;background:var(--warn);color:#fff;font-weight:800;font-size:19px;padding:12px 18px;border-radius:10px;margin:0 0 16px}
+.wrap{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px}
+textarea{width:100%;height:110px;font:12px/1.4 var(--mono);border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--panel);color:var(--ink)}
+label{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);display:block;margin-bottom:5px}
+.bar{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:18px}
+.bar .f{display:flex;flex-direction:column;gap:5px}
+input[type=text]{font:15px var(--sans);padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);width:110px}
+input[type=number]{font:15px var(--sans);padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);width:92px}
+select{font:15px var(--sans);padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);width:235px}
+button{font:15px/1 var(--sans);font-weight:700;padding:11px 20px;border-radius:9px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+#fict{display:none;font-size:12px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--acc);border:1px solid var(--acc);border-radius:7px;padding:4px 10px}
+#tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:6px 0 20px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.tile .k{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+.tile .v{font-size:29px;font-weight:800;margin-top:6px;font-variant-numeric:tabular-nums;padding:2px 0}
+.tile .s{font-size:12px;color:var(--dim);margin-top:3px}
+.tile.warn .v{color:var(--warn)} .tile.sig .v{color:var(--sig)} .tile.ok .v{color:var(--ok)}
+section{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px}
+section h2{font-size:17px;margin-bottom:4px}
+section .why{font-size:13px;color:var(--dim);margin-bottom:10px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);text-align:left;padding:5px 8px;border-bottom:2px solid var(--line)}
+td{padding:6px 8px;border-top:1px solid #EFEBE0;font-variant-numeric:tabular-nums;vertical-align:top}
+td.n,th.n{text-align:right}
+.chip{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.05em;border-radius:6px;padding:2px 7px;margin-left:6px;vertical-align:1px}
+.chip.drift{color:#fff;background:var(--warn)}
+.chip.dup{color:#fff;background:#7A2433}
+.chip.phantom{color:#fff;background:#8A5A2B}
+.chip.nr{color:#fff;background:#31424E}
+.chip.down{color:#fff;background:var(--ok)}
+.chip.quiet{color:var(--dim);background:#EFEBE0}
+.neg{color:var(--warn);font-weight:700}
+.stmt{white-space:pre-wrap;font:13px/1.6 var(--mono);background:#F4F1E9;border:1px solid #E6E0D2;border-radius:10px;padding:12px 14px;margin:8px 0}
+#recon{font:13.5px/1.7 var(--mono);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 20px}
+#recon .ok{color:var(--ok);font-weight:700} #recon .bad{color:var(--warn);font-weight:700}
+footer{margin-top:24px;font-size:12.5px;color:var(--dim)}
+@media (max-width:900px){#tiles{grid-template-columns:repeat(2,1fr)}.wrap{grid-template-columns:1fr}}
+</style></head><body>
+<h1>The Supplier Bill Checker <small>what you agreed, what arrived, what they billed — reconciled</small></h1>
+<div class="sub">Everything runs in this page. Nothing you paste leaves your machine, it keeps no account, and it never reads the clock — you type the billing period. <span id="fict">fictional sample data</span></div>
+<div id="banner"></div>
+<div class="wrap">
+  <div><label>your agreed price list (CSV: Supplier, Item Code, Description, Unit, Agreed Price)</label><textarea id="pcsv" spellcheck="false"></textarea></div>
+  <div><label>your receiving log (CSV: Date, Supplier, Item Code, Qty, Reference)</label><textarea id="rcsv" spellcheck="false"></textarea></div>
+  <div><label>the supplier bills (CSV: Invoice, Date, Supplier, Item Code, Description, Qty, Unit Price, Line Total)</label><textarea id="bcsv" spellcheck="false"></textarea></div>
+</div>
+<div class="bar">
+  <button id="sample">Load the sample shop</button>
+  <button id="go" class="primary">Check the bills</button>
+  <div class="f"><label for="s_period">billing period (typed, never the clock)</label><input id="s_period" type="text" placeholder="YYYY-MM"></div>
+  <div class="f"><label for="s_tol">price tolerance (%)</label><input id="s_tol" type="number" value="0.5" min="0" step="0.1"></div>
+  <div class="f"><label for="s_dup">duplicate window (days)</label><input id="s_dup" type="number" value="30" min="0" step="1"></div>
+  <div class="f"><label for="s_rec">receiving log</label><select id="s_rec"><option value="on">required — quantities checked against deliveries</option><option value="off">not kept — skip the quantity checks</option></select></div>
+  <button id="dl">Download the findings (CSV)</button>
+</div>
+<div id="out" style="display:none">
+<div id="tiles">
+  <div class="tile warn"><div class="k">Overbilled this period</div><div class="v" id="t_over">—</div><div class="s" id="t_over_s"></div></div>
+  <div class="tile sig"><div class="k">Biggest cause</div><div class="v" id="t_cause">—</div><div class="s" id="t_cause_s"></div></div>
+  <div class="tile ok"><div class="k">Credits owed to you</div><div class="v" id="t_cred">—</div><div class="s" id="t_cred_s"></div></div>
+  <div class="tile"><div class="k">If this period is typical</div><div class="v" id="t_year">—</div><div class="s">a year of it, at this rate</div></div>
+</div>
+<section><h2>Suppliers, worst first</h2>
+<div class="why" id="supwhy"></div>
+<table><thead><tr><th>Supplier</th><th class="n">Price drift</th><th class="n">Phantom qty</th><th class="n">Never received</th><th class="n">Billed twice</th><th class="n">In dispute</th><th class="n">Credits</th></tr></thead><tbody id="supT"></tbody></table></section>
+<section><h2>The disputed lines</h2>
+<div class="why">Every flagged line names its invoice, what you agreed, what they billed, and what the receiving log supports. A duplicate invoice is flagged whole — same goods, same prices, new number.</div>
+<table><thead><tr><th>Invoice</th><th>Date</th><th>Supplier</th><th>Item</th><th class="n">Qty</th><th class="n">Billed</th><th class="n">Agreed</th><th class="n">In dispute</th><th>Why</th></tr></thead><tbody id="flagT"></tbody></table></section>
+<section><h2>Check by hand, credits, and outside the period</h2>
+<div class="why">A line with no agreed price is a judgement call, not a verdict — it is listed, never guessed at. Credit memos are money owed to you. Lines outside the period are kept visible so the files and the audit reconcile.</div>
+<table><thead><tr><th>Kind</th><th>Invoice</th><th>Date</th><th>Supplier</th><th>Item</th><th class="n">Amount</th><th>Note</th></tr></thead><tbody id="revT"></tbody></table></section>
+<section><h2>Rows this page refused</h2>
+<div class="why">A row that can't be trusted is refused and listed with its reason — never silently swallowed, never guessed at.</div>
+<table><thead><tr><th>File</th><th class="n">Row</th><th>Supplier</th><th>Reason</th></tr></thead><tbody id="refT"></tbody></table></section>
+<section><h2>Dispute notes, one per supplier</h2>
+<div class="why">Built from the findings above — every dollar traces to a line. Print one, or paste it into an email. If the self-audit fails, every note is withheld.</div>
+<div id="stmts"></div></section>
+<div id="recon"></div>
+</div>
+<footer>The Supplier Bill Checker · built on "Build It With AI" · one file, no internet, no account. It audits bills against YOUR price list and YOUR receiving log — keep both honest. Sample business (Redbud Auto Repair) is fictional.</footer>
+<script>// The Supplier Bill Checker — final engine (Episode 23). All money in integer CENTS; every
+// division through halfUpDiv so two implementations cannot drift.
+// window.BC.build(pricesCsv, receivedCsv, billsCsv, settings) -> report object.
+(function (root) {
+  "use strict";
+  const DEF = { tolTenths: 5, dupWindowDays: 30, requireReceiving: true };
+
+  function splitCsv(text) {
+    const rows = [];
+    let row = [], cell = "", q = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (q) {
+        if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+        else cell += ch;
+      } else if (ch === '"') q = true;
+      else if (ch === ",") { row.push(cell); cell = ""; }
+      else if (ch === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; }
+      else if (ch !== "\r") cell += ch;
+    }
+    if (cell.length || row.length) { row.push(cell); rows.push(row); }
+    return rows.filter(r => r.length > 1 || (r[0] || "").trim() !== "");
+  }
+
+  const halfUpDiv = (a, b) => Math.floor((2 * a + b) / (2 * b));
+  const pctTenths = (delta, base) => (delta < 0 ? -1 : 1) * halfUpDiv(Math.abs(delta) * 1000, base);
+
+  function cents(s) {
+    const m = /^\s*\$?\s*(-?)([0-9][0-9,]*)(?:\.([0-9]{1,2}))?\s*$/.exec(s || "");
+    if (!m) return null;
+    const sign = m[1] === "-" ? -1 : 1;
+    const whole = parseInt(m[2].replace(/,/g, ""), 10);
+    const frac = m[3] ? (m[3].length === 1 ? +m[3] * 10 : +m[3]) : 0;
+    return sign * (whole * 100 + frac);
+  }
+  function intQty(s) {
+    const m = /^\s*(-?)([0-9]{1,6})\s*$/.exec(s || "");
+    if (!m) return null;
+    return (m[1] === "-" ? -1 : 1) * parseInt(m[2], 10);
+  }
+  const DATE = /^\s*(\d{4})-(\d{2})-(\d{2})\s*$/;
+  function parseDate(s) {
+    const m = DATE.exec(s || "");
+    if (!m) return null;
+    const y = +m[1], mo = +m[2], d = +m[3];
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    const dt = new Date(Date.UTC(y, mo - 1, d));
+    if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;
+    return { y, m: mo, d, t: dt.getTime() };
+  }
+  const PERIOD = /^\s*(\d{4})-(\d{2})\s*$/;
+  const DAY = 86400000;
+  const normItem = s => (s || "").toUpperCase().replace(/[\s-]+/g, "");
+  const normSup = s => (s || "").trim().toLowerCase();
+  const fmtMoney = c => (c < 0 ? "-$" : "$") + Math.abs(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  function parse(pricesCsv, receivedCsv, billsCsv) {
+    const refusedPrices = [], refusedReceipts = [], refusedBills = [];
+    const pr = splitCsv(pricesCsv), rr = splitCsv(receivedCsv), br = splitCsv(billsCsv);
+    if (!pr.length || !rr.length || !br.length) throw new Error("Paste all three files (or load the sample shop).");
+    const ph = pr[0].map(x => x.trim().toLowerCase());
+    const rh = rr[0].map(x => x.trim().toLowerCase());
+    const bh = br[0].map(x => x.trim().toLowerCase());
+    const pi = n => ph.indexOf(n), ri = n => rh.indexOf(n), bi = n => bh.indexOf(n);
+    for (const n of ["supplier", "item code", "agreed price"])
+      if (pi(n) === -1) throw new Error("The price list is missing a “" + n + "” column.");
+    for (const n of ["date", "supplier", "item code", "qty"])
+      if (ri(n) === -1) throw new Error("The receiving log is missing a “" + n + "” column.");
+    for (const n of ["invoice", "date", "supplier", "item code", "qty", "unit price"])
+      if (bi(n) === -1) throw new Error("The bills file is missing a “" + n + "” column.");
+
+    const prices = new Map();   // supKey|itemKey -> {supplier,item,desc,unit,agreedC,line}
+    const supNames = new Map(); // supKey -> display name (first seen on the price list)
+    let priceRows = 0;
+    for (let r = 1; r < pr.length; r++) {
+      const row = pr[r]; priceRows++;
+      const line = r + 1;
+      const sup = (row[pi("supplier")] || "").trim();
+      const item = (row[pi("item code")] || "").trim();
+      if (!sup || !item) { refusedPrices.push({ line, name: sup || "(blank)", reason: "supplier or item code missing" }); continue; }
+      const agreedC = cents(row[pi("agreed price")]);
+      if (agreedC === null || agreedC < 0) { refusedPrices.push({ line, name: sup, reason: "agreed price unreadable: “" + (row[pi("agreed price")] || "").trim() + "”" }); continue; }
+      const key = normSup(sup) + "|" + normItem(item);
+      if (prices.has(key)) { refusedPrices.push({ line, name: sup, reason: "duplicate item — the first row was kept" }); continue; }
+      if (!supNames.has(normSup(sup))) supNames.set(normSup(sup), sup);
+      prices.set(key, { supplier: sup, item, desc: pi("description") === -1 ? "" : (row[pi("description")] || "").trim(),
+        unit: pi("unit") === -1 ? "" : (row[pi("unit")] || "").trim(), agreedC, line });
+    }
+    const receipts = [], unmatched = [];
+    let receiptRows = 0;
+    for (let r = 1; r < rr.length; r++) {
+      const row = rr[r]; receiptRows++;
+      const line = r + 1;
+      const d = parseDate(row[ri("date")]);
+      const sup = (row[ri("supplier")] || "").trim();
+      const item = (row[ri("item code")] || "").trim();
+      const qty = intQty(row[ri("qty")]);
+      const ref = ri("reference") === -1 ? "" : (row[ri("reference")] || "").trim();
+      if (!d) { refusedReceipts.push({ line, name: sup || "(blank)", reason: "date unreadable: “" + (row[ri("date")] || "").trim() + "”" }); continue; }
+      if (qty === null || qty <= 0) { refusedReceipts.push({ line, name: sup, reason: "quantity unreadable: “" + (row[ri("qty")] || "").trim() + "”" }); continue; }
+      const key = normSup(sup) + "|" + normItem(item);
+      if (!prices.has(key)) { unmatched.push({ line, supplier: sup, item, qty, date: row[ri("date")].trim(), ref }); continue; }
+      receipts.push({ line, key, qty, t: d.t, date: row[ri("date")].trim(), ref });
+    }
+    const bills = [];
+    let billLines = 0;
+    for (let r = 1; r < br.length; r++) {
+      const row = br[r]; billLines++;
+      const line = r + 1;
+      const inv = (row[bi("invoice")] || "").trim();
+      const sup = (row[bi("supplier")] || "").trim();
+      const item = (row[bi("item code")] || "").trim();
+      const desc = bi("description") === -1 ? "" : (row[bi("description")] || "").trim();
+      if (!inv) { refusedBills.push({ line, name: sup || "(blank)", reason: "no invoice number" }); continue; }
+      const d = parseDate(row[bi("date")]);
+      if (!d) { refusedBills.push({ line, name: sup, inv, reason: "date unreadable: “" + (row[bi("date")] || "").trim() + "”" }); continue; }
+      const qty = intQty(row[bi("qty")]);
+      if (qty === null || qty === 0) { refusedBills.push({ line, name: sup, inv, reason: "quantity unreadable: “" + (row[bi("qty")] || "").trim() + "”" }); continue; }
+      const unitC = cents(row[bi("unit price")]);
+      if (unitC === null || unitC < 0) { refusedBills.push({ line, name: sup, inv, reason: "unit price unreadable: “" + (row[bi("unit price")] || "").trim() + "”" }); continue; }
+      const printedRaw = bi("line total") === -1 ? "" : (row[bi("line total")] || "").trim();
+      const amountC = qty * unitC;
+      if (printedRaw !== "") {
+        const printedC = cents(printedRaw);
+        if (printedC === null || printedC !== amountC) {
+          refusedBills.push({ line, name: sup, inv, reason: "the line disagrees with its own arithmetic (printed "
+            + (printedRaw || "nothing") + "; the numbers say " + fmtMoney(amountC) + ")" });
+          continue;
+        }
+      }
+      bills.push({ line, inv, sup, supKey: normSup(sup), item, itemKey: normItem(item), desc, qty, unitC, amountC, d, date: row[bi("date")].trim() });
+    }
+    return { prices, supNames, receipts, unmatched, bills, refusedPrices, refusedReceipts, refusedBills,
+      priceRows, receiptRows, billLines };
+  }
+
+  function build(pricesCsv, receivedCsv, billsCsv, settings) {
+    const S = Object.assign({}, DEF, settings || {});
+    const pm = PERIOD.exec(S.period || "");
+    if (!pm) throw new Error("The Bill Checker never reads the clock — type the billing period (YYYY-MM).");
+    const py = +pm[1], pmo = +pm[2];
+    if (pmo < 1 || pmo > 12) throw new Error("The Bill Checker never reads the clock — type the billing period (YYYY-MM).");
+    const periodEndT = Date.UTC(py, pmo, 0);
+    const inPeriod = d => d.y === py && d.m === pmo;
+
+    const P = parse(pricesCsv, receivedCsv, billsCsv);
+
+    // receipt balances: every counted receipt dated <= period end
+    const balance = new Map();
+    const receivedTotal = new Map();
+    for (const rc of P.receipts) {
+      if (rc.t > periodEndT) continue;
+      balance.set(rc.key, (balance.get(rc.key) || 0) + rc.qty);
+      receivedTotal.set(rc.key, (receivedTotal.get(rc.key) || 0) + rc.qty);
+    }
+
+    // classify in processing order (date asc, then file order)
+    const ordered = P.bills.slice().sort((a, b) => a.d.t - b.d.t || a.line - b.line);
+    const credits = [], outside = [], review = [];
+    const candidates = [];                        // in-period, non-credit, priced lines + review split
+    for (const L of ordered) {
+      if (L.qty < 0) { credits.push(L); continue; }
+      if (!inPeriod(L.d)) { outside.push(L); continue; }
+      const key = L.supKey + "|" + L.itemKey;
+      if (!P.prices.has(key)) {
+        review.push({ ...L, reason: P.supNames.has(L.supKey) ? "no agreed price for this item — check it by hand"
+          : "supplier not on your price list — check it by hand" });
+        continue;
+      }
+      candidates.push(L);
+    }
+
+    // duplicate detection among candidates, grouped by (supplier, invoice id)
+    const invMap = new Map();
+    for (const L of candidates) {
+      const ik = L.supKey + "|" + L.inv;
+      if (!invMap.has(ik)) invMap.set(ik, { supKey: L.supKey, inv: L.inv, lines: [], minT: L.d.t, firstLine: L.line });
+      const g = invMap.get(ik);
+      g.lines.push(L);
+      if (L.d.t < g.minT) g.minT = L.d.t;
+      if (L.line < g.firstLine) g.firstLine = L.line;
+    }
+    const invoices = [...invMap.values()].sort((a, b) => a.minT - b.minT || a.firstLine - b.firstLine);
+    const seen = [];                               // non-duplicate invoices, in order
+    const dupInvoices = [];
+    for (const g of invoices) {
+      g.fp = g.lines.map(L => L.itemKey + "*" + L.qty + "*" + L.unitC).sort().join(";");
+      let dupOf = null;
+      for (const e of seen) {
+        if (e.supKey === g.supKey && e.inv !== g.inv && e.fp === g.fp
+          && (g.minT - e.minT) / DAY <= S.dupWindowDays && g.minT >= e.minT) { dupOf = e; break; }
+      }
+      if (dupOf) { g.dupOf = dupOf.inv; dupInvoices.push(g); }
+      else seen.push(g);
+    }
+    const dupLineSet = new Set();
+    for (const g of dupInvoices) for (const L of g.lines) dupLineSet.add(L.line);
+
+    // price + receiving checks on non-duplicate candidates, consuming balances in order
+    const flagged = [], clean = [];
+    const duplicates = [];
+    let driftC = 0, phantomC = 0, notReceivedC = 0, duplicateC = 0, downC = 0, billedC = 0;
+    for (const L of candidates) {
+      const key = L.supKey + "|" + L.itemKey;
+      billedC += L.amountC;
+      if (dupLineSet.has(L.line)) {
+        const g = dupInvoices.find(x => x.lines.some(y => y.line === L.line));
+        duplicateC += L.amountC;
+        duplicates.push({ line: L.line, inv: L.inv, dupOf: g.dupOf, supplier: L.sup, item: L.item, date: L.date,
+          qty: L.qty, unitC: L.unitC, amountC: L.amountC });
+        continue;
+      }
+      const agreed = P.prices.get(key);
+      const flags = [], notes = [];
+      let overC = 0;
+      const diff = L.unitC - agreed.agreedC;
+      const tolC = halfUpDiv(agreed.agreedC * S.tolTenths, 1000);
+      if (diff > tolC) {
+        flags.push("PRICE DRIFT");
+        overC += diff * L.qty;
+        driftC += diff * L.qty;
+      } else if (diff > 0) {
+        notes.push("within tolerance (+" + fmtMoney(diff) + "/unit)");
+      } else if (diff < 0) {
+        notes.push("DOWN " + fmtMoney(-diff) + "/unit");
+        downC += (-diff) * L.qty;
+      }
+      if (S.requireReceiving) {
+        const totalRec = receivedTotal.get(key) || 0;
+        if (totalRec === 0) {
+          flags.push("NOT RECEIVED");
+          overC += L.amountC;
+          notReceivedC += L.amountC;
+        } else {
+          const bal = balance.get(key) || 0;
+          const used = Math.min(bal, L.qty);
+          balance.set(key, bal - used);
+          const phantom = L.qty - used;
+          if (phantom > 0) {
+            flags.push("PHANTOM QTY");
+            overC += phantom * L.unitC;
+            phantomC += phantom * L.unitC;
+            notes.push(phantom + " unit" + (phantom === 1 ? "" : "s") + " billed beyond what arrived");
+          }
+        }
+      }
+      const rec = { line: L.line, inv: L.inv, supplier: L.sup, item: L.item, desc: L.desc, date: L.date,
+        qty: L.qty, unitC: L.unitC, agreedC: agreed.agreedC, amountC: L.amountC, flags, notes, overC };
+      if (flags.length) flagged.push(rec); else clean.push(rec);
+    }
+    flagged.sort((a, b) => (a.supplier.toLowerCase() < b.supplier.toLowerCase() ? -1 : a.supplier.toLowerCase() > b.supplier.toLowerCase() ? 1 : 0)
+      || (a.date < b.date ? -1 : a.date > b.date ? 1 : 0) || a.line - b.line);
+    duplicates.sort((a, b) => a.line - b.line);
+
+    const creditC = credits.reduce((s, L) => s + L.amountC, 0);
+    const overchargeC = driftC + phantomC + notReceivedC + duplicateC;
+
+    // per-supplier groups, re-accumulated independently
+    const groups = new Map();
+    const bump = (sup, field, v) => {
+      const k = normSup(sup);
+      if (!groups.has(k)) groups.set(k, { supplier: sup, driftC: 0, phantomC: 0, notReceivedC: 0, duplicateC: 0, overchargeC: 0, creditC: 0, flaggedLines: 0 });
+      groups.get(k)[field] += v;
+    };
+    for (const f of flagged) {
+      let dr = 0, phq = 0, nr = 0;
+      const diff = f.unitC - f.agreedC;
+      if (f.flags.includes("PRICE DRIFT")) dr = diff * f.qty;
+      if (f.flags.includes("NOT RECEIVED")) nr = f.amountC;
+      if (f.flags.includes("PHANTOM QTY")) phq = f.overC - dr - nr;
+      bump(f.supplier, "driftC", dr); bump(f.supplier, "phantomC", phq); bump(f.supplier, "notReceivedC", nr);
+      bump(f.supplier, "overchargeC", f.overC); bump(f.supplier, "flaggedLines", 1);
+    }
+    for (const d of duplicates) { bump(d.supplier, "duplicateC", d.amountC); bump(d.supplier, "overchargeC", d.amountC); bump(d.supplier, "flaggedLines", 1); }
+    for (const L of credits) bump(L.sup, "creditC", L.amountC);
+    const suppliers = [...groups.values()].sort((a, b) => b.overchargeC - a.overchargeC
+      || (a.supplier.toLowerCase() < b.supplier.toLowerCase() ? -1 : 1));
+    const groupSumC = suppliers.reduce((s, g) => s + g.overchargeC, 0);
+
+    const counts = { priceRows: P.priceRows, receiptRows: P.receiptRows, billLines: P.billLines,
+      priced: P.prices.size, refusedPrices: P.refusedPrices.length,
+      receiptsCounted: P.receipts.length, receiptsUnmatched: P.unmatched.length, refusedReceipts: P.refusedReceipts.length,
+      clean: clean.length, flagged: flagged.length, review: review.length, credits: credits.length,
+      outside: outside.length, duplicateLines: duplicates.length, dupInvoices: dupInvoices.length,
+      refusedBills: P.refusedBills.length };
+
+    const linesTie = counts.billLines === counts.clean + counts.flagged + counts.review + counts.credits
+      + counts.outside + counts.duplicateLines + counts.refusedBills;
+    const receiptsTie = counts.receiptRows === counts.receiptsCounted + counts.receiptsUnmatched + counts.refusedReceipts;
+    const moneyTie = overchargeC === driftC + phantomC + notReceivedC + duplicateC && overchargeC === groupSumC;
+    const shareBills = counts.billLines ? pctTenths(counts.refusedBills, counts.billLines) : 0;
+    const shareReceipts = counts.receiptRows ? pctTenths(counts.refusedReceipts, counts.receiptRows) : 0;
+    const shareOk = shareBills <= 250 && shareReceipts <= 250;
+    const trusted = linesTie && receiptsTie && moneyTie && shareOk;
+    let banner = "";
+    if (!trusted) {
+      banner = "DO NOT TRUST THIS AUDIT — " + (!linesTie ? "the bill lines do not tie."
+        : !receiptsTie ? "the receiving rows do not tie."
+        : !moneyTie ? "the overcharge does not re-total from its causes and suppliers."
+        : "too many rows refused (bills " + (shareBills / 10).toFixed(1) + "%, receiving "
+          + (shareReceipts / 10).toFixed(1) + "%). Fix the export and run it again.");
+    }
+
+    // dispute notes — built ONLY from report numbers; withheld entirely when not trusted
+    const notes = [];
+    if (trusted) {
+      const bySup = new Map();
+      for (const f of flagged) { const k = normSup(f.supplier); if (!bySup.has(k)) bySup.set(k, { supplier: f.supplier, f: [], d: [] }); bySup.get(k).f.push(f); }
+      for (const d of duplicates) { const k = normSup(d.supplier); if (!bySup.has(k)) bySup.set(k, { supplier: d.supplier, f: [], d: [] }); bySup.get(k).d.push(d); }
+      const sups = [...bySup.values()].sort((a, b) => (a.supplier.toLowerCase() < b.supplier.toLowerCase() ? -1 : 1));
+      for (const s of sups) {
+        const g = groups.get(normSup(s.supplier));
+        const lines = [];
+        lines.push("DISPUTE NOTE — " + s.supplier + " — billing period " + S.period);
+        lines.push("Prepared from our agreed price list, our receiving log, and your invoices. Every figure below traces to a specific line.");
+        for (const d of s.d)
+          lines.push("  " + d.inv + " (" + d.date + "): duplicate of " + d.dupOf + " — " + d.item + " x" + d.qty
+            + " at " + fmtMoney(d.unitC) + " = " + fmtMoney(d.amountC) + " billed twice");
+        for (const f of s.f) {
+          if (f.flags.includes("PRICE DRIFT"))
+            lines.push("  " + f.inv + " (" + f.date + "): " + f.item + " billed at " + fmtMoney(f.unitC)
+              + " against the agreed " + fmtMoney(f.agreedC) + " x" + f.qty + " = " + fmtMoney((f.unitC - f.agreedC) * f.qty) + " over");
+          if (f.flags.includes("PHANTOM QTY")) {
+            const dr = f.flags.includes("PRICE DRIFT") ? (f.unitC - f.agreedC) * f.qty : 0;
+            lines.push("  " + f.inv + " (" + f.date + "): " + f.item + " billed x" + f.qty
+              + ", our receiving log supports fewer — " + fmtMoney(f.overC - dr) + " billed for units that did not arrive");
+          }
+          if (f.flags.includes("NOT RECEIVED"))
+            lines.push("  " + f.inv + " (" + f.date + "): " + f.item + " x" + f.qty + " = " + fmtMoney(f.amountC)
+              + " — we have no record of receiving this item at all");
+        }
+        lines.push("Total in dispute: " + fmtMoney(g.overchargeC));
+        if (g.creditC < 0) lines.push("Credits on your own memos this period: " + fmtMoney(g.creditC) + " — please confirm they are applied.");
+        lines.push("Please send a corrected statement or a credit memo for the amount above.");
+        notes.push({ supplier: s.supplier, text: lines.join("\n") });
+      }
+    }
+
+    return { settings: { period: S.period, tolTenths: S.tolTenths, dupWindowDays: S.dupWindowDays, requireReceiving: S.requireReceiving },
+      counts,
+      totals: { overchargeC, driftC, phantomC, notReceivedC, duplicateC, creditC, downC, billedC,
+        yearizedC: overchargeC * 12, groupSumC },
+      flagged, clean: clean.map(c => ({ line: c.line, inv: c.inv, supplier: c.supplier, item: c.item, date: c.date,
+        qty: c.qty, unitC: c.unitC, agreedC: c.agreedC, amountC: c.amountC, notes: c.notes })),
+      duplicates, dupInvoices: dupInvoices.map(g => ({ inv: g.inv, dupOf: g.dupOf, supplier: supOf(g, P), amountC: g.lines.reduce((s, L) => s + L.amountC, 0), date: new Date(g.minT).toISOString().slice(0, 10) })),
+      review: review.map(L => ({ line: L.line, inv: L.inv, supplier: L.sup, item: L.item, date: L.date, qty: L.qty, unitC: L.unitC, amountC: L.amountC, reason: L.reason })),
+      credits: credits.map(L => ({ line: L.line, inv: L.inv, supplier: L.sup, item: L.item, date: L.date, qty: L.qty, unitC: L.unitC, amountC: L.amountC })),
+      outside: outside.map(L => ({ line: L.line, inv: L.inv, supplier: L.sup, item: L.item, date: L.date, qty: L.qty, unitC: L.unitC, amountC: L.amountC })),
+      suppliers,
+      unmatchedReceipts: P.unmatched,
+      refusedPrices: P.refusedPrices, refusedReceipts: P.refusedReceipts, refusedBills: P.refusedBills,
+      notes, notesWithheld: !trusted,
+      recon: { linesTie, receiptsTie, moneyTie, shareBills_tenths: shareBills, shareReceipts_tenths: shareReceipts, trusted, banner } };
+  }
+  function supOf(g, P) { for (const L of g.lines) return L.sup; return ""; }
+
+  root.BC = { build, _cents: cents, _intQty: intQty, _halfUpDiv: halfUpDiv, _fmtMoney: fmtMoney, _normItem: normItem };
+})(typeof window !== "undefined" ? window : (typeof module !== "undefined" ? module.exports : this));
+</script>
+<script>
+const SAMPLE_P = "Supplier,Item Code,Description,Unit,Agreed Price\nKeystone Parts Co.,BRK-PAD-240,Brake pad set ceramic,each,38.60\nKeystone Parts Co.,ALT-90218,Alternator reman,each,218.40\nKeystone Parts Co.,ROT-4411,Brake rotor,each,42.25\nKeystone Parts Co.,FLT-PH3387,Oil filter PH3387,each,8.90\nKeystone Parts Co.,BAT-65AGM,Battery 65 AGM,each,129.75\nKeystone Parts Co.,GSK-HD220,Head gasket set,each,86.40\nKeystone Parts Co.,SPK-IR7,Spark plug iridium,each,9.15\nValley Auto Warehouse,WPR-22B,Wiper blade 22in,each,11.20\nValley Auto Warehouse,CLT-50G,Coolant gallon,each,11.75\nValley Auto Warehouse,BLB-9006,Headlamp bulb 9006,each,13.45\nValley Auto Warehouse,HOS-RAD38,Radiator hose,each,24.30\nValley Auto Warehouse,FUS-ASST,Fuse assortment box,box,18.75\nBrightline Lubricants,OIL-5W30-CS,5W-30 synthetic case of 12,case,142.00\nBrightline Lubricants,OIL-DRM-15W40,15W-40 drum,drum,389.00\nBrightline Lubricants,GRS-TUB10,Grease tubes 10-pack,pack,31.60\nCascade Shop Supply,TWL-CS,Shop towels case,case,32.00\nCascade Shop Supply,GLV-NIT-L,Nitrile gloves L box,box,14.90\nCascade Shop Supply,BRK-CLN-12,Brake cleaner 12-pack,pack,46.80\nCascade Shop Supply,ZIP-500,Zip ties 500,bag,9.40\n";
+const SAMPLE_R = "Date,Supplier,Item Code,Qty,Reference\n2026-10-02,Valley Auto Warehouse,BLB-9006,2,R-1182\n2026-10-03,Keystone Parts Co.,ALT-90218,2,R-1183\n2026-10-06,Keystone Parts Co.,BRK-PAD-240,4,R-1184\n2026-10-06,Keystone Parts Co.,ROT-4411,4,R-1184\n2026-10-06,Keystone Parts Co.,BAT-65AGM,1,R-1184\n2026-10-06,Keystone Parts Co.,SPK-IR7,8,R-1184\n2026-10-06,Keystone Parts Co.,GSK-HD220,1,R-1184\n2026-10-06,Valley Auto Warehouse,WPR-22B,12,R-1185\n2026-10-06,Cascade Shop Supply,GLV-NIT-L,2,R-1186\n2026-10-06,Cascade Shop Supply,BRK-CLN-12,1,R-1186\n2026-10-06,Cascade Shop Supply,ZIP-500,2,R-1186\n2026-10-09,Brightline Lubricants,OIL-5W30-CS,4,R-1187\n2026-10-10,Keystone Parts Co.,GSK-HD220,1,R-1188\n2026-10-10,Keystone Parts Co.,FLT-PH3387,6,R-1188\n2026-10-14,Valley Auto Warehouse,CLT-50G,18,R-1189\n2026-10-15,Valley Auto Warehouse,DEF-2.5GAL,3,R-1190\n2026-10-20,Valley Auto Warehouse,WPR-22B,12,R-1191\n2026-10-20,Valley Auto Warehouse,HOS-RAD38,2,R-1191\n2026-10-24,Keystone Parts Co.,BRK-PAD-240,8,R-1192\n2026-10-27,Brightline Lubricants,GRS-TUB10,2,R-1193\n2026-10-28,Valley Auto Warehouse,FUS-ASST,1,R-1194\n2026-13-02,Valley Auto Warehouse,FUS-ASST,1,R-1195\n2026-10-29,Cascade Shop Supply,ZIP-500,-1,R-1196\n";
+const SAMPLE_B = "Invoice,Date,Supplier,Item Code,Description,Qty,Unit Price,Line Total\nKP-10358,2026-10-03,Keystone Parts Co.,ALT-90218,ALTERNATOR REMAN,2,269.00,538.00\nKP-10387,2026-10-07,Keystone Parts Co.,BRK-PAD-240,BRAKE PAD SET CERAMIC,4,38.60,154.40\nKP-10387,2026-10-07,Keystone Parts Co.,ROT-4411,BRAKE ROTOR,4,42.25,169.00\nKP-10387,2026-10-07,Keystone Parts Co.,BAT-65AGM,BATTERY 65 AGM,1,129.75,129.75\nKP-10387,2026-10-07,Keystone Parts Co.,SPK-IR7,SPARK PLUG IRIDIUM,8,9.15,73.20\nKP-10387,2026-10-07,Keystone Parts Co.,GSK-HD220,HEAD GASKET SET,1,86.40,86.40\nKP-10395,last Tuesday,Keystone Parts Co.,SPK-IR7,SPARK PLUGS,4,9.15,36.60\nKP-10401,2026-10-10,Keystone Parts Co.,GSK-HD220,Head gasket set,1,86.50,86.50\nKP-10401,2026-10-10,Keystone Parts Co.,FLT-PH3387,Oil filter PH3387,6,8.40,50.40\nKP-10429,2026-10-21,Keystone Parts Co.,BRK-PAD-240,BRAKE PAD SET CERAMIC,4,38.60,154.40\nKP-10429,2026-10-21,Keystone Parts Co.,ROT-4411,BRAKE ROTOR,4,42.25,169.00\nKP-10429,2026-10-21,Keystone Parts Co.,BAT-65AGM,BATTERY 65 AGM,1,129.75,129.75\nKP-10429,2026-10-21,Keystone Parts Co.,SPK-IR7,SPARK PLUG IRIDIUM,8,9.15,73.20\nKP-10429,2026-10-21,Keystone Parts Co.,GSK-HD220,HEAD GASKET SET,1,86.40,86.40\nKP-10440,2026-10-24,Keystone Parts Co.,BRK-PAD-240,BRAKE PADS CERAMIC SET,8,44.95,359.60\nBL-7731,2026-10-09,Brightline Lubricants,OIL-5W30-CS,5W30 SYN CASE/12,4,159.50,638.00\nCM-2211,2026-10-12,Brightline Lubricants,GRS-TUB10,GREASE TUBES 10PK RETURN,-1,31.60,-31.60\nBL-7762,2026-10-27,Brightline Lubricants,GRS-TUB10,GREASE TUBES 10PK,2,31.60,63.20\nVA-2241,2026-10-08,Valley Auto Warehouse,BLB-9006,Headlamp bulb 9006,2,15.95,31.90\nVA-2250,2026-10-15,Valley Auto Warehouse,CLT-50G,COOLANT GAL,24,11.75,282.00\nVA-2250,2026-10-15,Valley Auto Warehouse,DEF-2.5GAL,DEF 2.5 GAL,3,12.80,38.40\nVA-2259,2026-10-22,Valley Auto Warehouse,WPR-22B,WIPER 22,24,11.20,268.80\nVA-2259,2026-10-22,Valley Auto Warehouse,HOS-RAD38,RADIATOR HOSE,2,24.30,48.60\nCS-498,2026-10-06,Cascade Shop Supply,GLV-NIT-L,NITRILE GLOVES L,2,14.90,33.60\nCS-498,2026-10-06,Cascade Shop Supply,BRK-CLN-12,BRAKE CLEANER 12PK,1,46.80,46.80\nCS-498,2026-10-06,Cascade Shop Supply,ZIP-500,ZIP TIES 500,2,9.40,18.80\nCS-512,2026-10-18,Cascade Shop Supply,TWL-CS,SHOP TOWELS CASE,2,32.00,64.00\nCS-530,2026-11-02,Cascade Shop Supply,GLV-NIT-L,NITRILE GLOVES L,1,14.90,14.90\nMF-88,2026-10-19,Metro Fastener,BLT-GR8,GRADE 8 BOLT KIT,1,44.00,44.00\nVA-2263,2026-10-28,Valley Auto Warehouse,FUS-ASST,Fuse assortment box,1,18.75,18.75\n";
+const $=id=>document.getElementById(id);
+const money=c=>(c<0?"-$":"$")+Math.abs(c/100).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+let LAST=null;
+function settings(){
+  const tol=Math.round((parseFloat($("s_tol").value)||0)*10);
+  const dup=parseInt($("s_dup").value,10);
+  return {period:$("s_period").value.trim(),tolTenths:tol<0?0:tol,
+    dupWindowDays:isNaN(dup)||dup<0?0:dup,requireReceiving:$("s_rec").value==="on"};
+}
+function run(){
+  const p=$("pcsv").value,r=$("rcsv").value,b=$("bcsv").value;
+  if(!p.trim()||!r.trim()||!b.trim()){alert("Paste all three files (or load the sample shop).");return;}
+  let R;
+  try{R=window.BC.build(p,r,b,settings());}catch(e){alert(e.message);return;}
+  LAST=R;
+  $("out").style.display="block";
+  const bn=$("banner");
+  if(!R.recon.trusted){bn.style.display="block";bn.textContent=R.recon.banner;}
+  else bn.style.display="none";
+  $("t_over").textContent=money(R.totals.overchargeC);
+  $("t_over_s").textContent=(R.counts.flagged+R.counts.duplicateLines)+" disputed lines across "+R.suppliers.filter(g=>g.overchargeC>0).length+" suppliers";
+  const causes=[["billed twice",R.totals.duplicateC],["price drift",R.totals.driftC],["phantom quantities",R.totals.phantomC],["never received",R.totals.notReceivedC]].sort((a,b2)=>b2[1]-a[1]);
+  $("t_cause").textContent=money(causes[0][1]);
+  $("t_cause_s").textContent=causes[0][0];
+  $("t_cred").textContent=money(-R.totals.creditC);
+  $("t_cred_s").textContent=R.counts.credits+" credit memo"+(R.counts.credits===1?"":"s")+" this period";
+  $("t_year").textContent=money(R.totals.yearizedC);
+  $("supwhy").textContent="Billing period "+R.settings.period+" · tolerance "+(R.settings.tolTenths/10).toFixed(1)+"% · duplicate window "+R.settings.dupWindowDays+" days · receiving log "+(R.settings.requireReceiving?"required":"not kept")+".";
+  $("supT").innerHTML=R.suppliers.map(g=>`<tr><td>${esc(g.supplier)}</td><td class="n">${money(g.driftC)}</td><td class="n">${money(g.phantomC)}</td><td class="n">${money(g.notReceivedC)}</td><td class="n">${money(g.duplicateC)}</td><td class="n ${g.overchargeC>0?"neg":""}"><b>${money(g.overchargeC)}</b></td><td class="n">${money(g.creditC)}</td></tr>`).join("");
+  const chip=f=>f==="PRICE DRIFT"?'<span class="chip drift">PRICE DRIFT</span>':f==="PHANTOM QTY"?'<span class="chip phantom">PHANTOM QTY</span>':f==="NOT RECEIVED"?'<span class="chip nr">NEVER RECEIVED</span>':"";
+  const flagRows=R.flagged.map(f=>`<tr><td>${esc(f.inv)}</td><td>${esc(f.date)}</td><td>${esc(f.supplier)}</td><td>${esc(f.item)}</td><td class="n">${f.qty}</td><td class="n">${money(f.unitC)}</td><td class="n">${money(f.agreedC)}</td><td class="n neg"><b>${money(f.overC)}</b></td><td>${f.flags.map(chip).join("")} ${esc(f.notes.join(" · "))}</td></tr>`)
+    .concat(R.duplicates.map(d=>`<tr><td>${esc(d.inv)}</td><td>${esc(d.date)}</td><td>${esc(d.supplier)}</td><td>${esc(d.item)}</td><td class="n">${d.qty}</td><td class="n">${money(d.unitC)}</td><td class="n">—</td><td class="n neg"><b>${money(d.amountC)}</b></td><td><span class="chip dup">BILLED TWICE</span> duplicate of ${esc(d.dupOf)}</td></tr>`));
+  $("flagT").innerHTML=flagRows.join("")||`<tr><td colspan="9" class="why">Nothing in dispute this period.</td></tr>`;
+  const rev=R.review.map(x=>`<tr><td>check by hand</td><td>${esc(x.inv)}</td><td>${esc(x.date)}</td><td>${esc(x.supplier)}</td><td>${esc(x.item)}</td><td class="n">${money(x.amountC)}</td><td>${esc(x.reason)}</td></tr>`)
+    .concat(R.credits.map(x=>`<tr><td>credit</td><td>${esc(x.inv)}</td><td>${esc(x.date)}</td><td>${esc(x.supplier)}</td><td>${esc(x.item)}</td><td class="n">${money(x.amountC)}</td><td>owed to you — confirm it lands</td></tr>`))
+    .concat(R.outside.map(x=>`<tr><td>outside period</td><td>${esc(x.inv)}</td><td>${esc(x.date)}</td><td>${esc(x.supplier)}</td><td>${esc(x.item)}</td><td class="n">${money(x.amountC)}</td><td>dated outside ${esc(R.settings.period)}</td></tr>`))
+    .concat(R.unmatchedReceipts.map(u=>`<tr><td>unmatched receipt</td><td>${esc(u.ref||"—")}</td><td>${esc(u.date)}</td><td>${esc(u.supplier)}</td><td>${esc(u.item)}</td><td class="n">x${u.qty}</td><td>not on your price list — consumed by nothing</td></tr>`));
+  $("revT").innerHTML=rev.join("")||`<tr><td colspan="7" class="why">Nothing to review.</td></tr>`;
+  const refRows=R.refusedPrices.map(x=>`<tr><td>prices.csv</td><td class="n">${x.line}</td><td>${esc(x.name)}</td><td>${esc(x.reason)}</td></tr>`)
+    .concat(R.refusedReceipts.map(x=>`<tr><td>received.csv</td><td class="n">${x.line}</td><td>${esc(x.name)}</td><td>${esc(x.reason)}</td></tr>`))
+    .concat(R.refusedBills.map(x=>`<tr><td>bills.csv</td><td class="n">${x.line}</td><td>${esc(x.name)}</td><td>${esc(x.reason)}</td></tr>`));
+  $("refT").innerHTML=refRows.join("")||`<tr><td colspan="4" class="why">Nothing refused.</td></tr>`;
+  $("stmts").innerHTML=R.notesWithheld
+    ? `<div class="why" id="withheld">Dispute notes withheld — fix the refused rows and run it again.</div>`
+    : (R.notes.map(s2=>`<div class="stmt">${esc(s2.text)}</div>`).join("")||`<div class="why">No disputes — no notes needed.</div>`);
+  const rc=R.recon;
+  $("recon").innerHTML=
+   `self-audit, run every time\n`+
+   `bills     ${R.counts.billLines} lines in = ${R.counts.clean} clean + ${R.counts.flagged} flagged + ${R.counts.duplicateLines} billed twice + ${R.counts.review} check-by-hand + ${R.counts.credits} credits + ${R.counts.outside} outside + ${R.counts.refusedBills} refused  <span class="${rc.linesTie?"ok":"bad"}">${rc.linesTie?"ties":"DOES NOT TIE"}</span>\n`+
+   `receiving ${R.counts.receiptRows} rows in = ${R.counts.receiptsCounted} counted + ${R.counts.receiptsUnmatched} unmatched + ${R.counts.refusedReceipts} refused  <span class="${rc.receiptsTie?"ok":"bad"}">${rc.receiptsTie?"ties":"DOES NOT TIE"}</span>\n`+
+   `money     ${money(R.totals.overchargeC)} re-totals from its four causes and again from the supplier table, to the cent  <span class="${rc.moneyTie?"ok":"bad"}">${rc.moneyTie?"ties":"DOES NOT TIE"}</span>\n`+
+   `refused   bills ${(rc.shareBills_tenths/10).toFixed(1)}% · receiving ${(rc.shareReceipts_tenths/10).toFixed(1)}%  <span class="${rc.shareBills_tenths<=250&&rc.shareReceipts_tenths<=250?"ok":"bad"}">${rc.shareBills_tenths<=250&&rc.shareReceipts_tenths<=250?"within tolerance":"over 25% — do not trust"}</span>`;
+  window.__done=true;
+}
+$("sample").addEventListener("click",()=>{$("pcsv").value=SAMPLE_P;$("rcsv").value=SAMPLE_R;$("bcsv").value=SAMPLE_B;$("fict").style.display="inline-block";if(!$("s_period").value)$("s_period").value="2026-10";window.__done=false;run();});
+$("go").addEventListener("click",()=>{window.__done=false;run();});
+for(const id of ["s_period","s_tol","s_dup","s_rec"]) $(id).addEventListener("change",()=>{if(LAST){window.__done=false;run();}});
+$("dl").addEventListener("click",()=>{
+  if(!LAST){alert("Check the bills first.");return;}
+  const rows=[["Invoice","Date","Supplier","Item","Qty","Billed","Agreed","In dispute","Why"]].concat(
+    LAST.flagged.map(f=>[f.inv,f.date,f.supplier,f.item,f.qty,(f.unitC/100).toFixed(2),(f.agreedC/100).toFixed(2),(f.overC/100).toFixed(2),f.flags.join("+")]),
+    LAST.duplicates.map(d=>[d.inv,d.date,d.supplier,d.item,d.qty,(d.unitC/100).toFixed(2),"",(d.amountC/100).toFixed(2),"BILLED TWICE (dup of "+d.dupOf+")"]));
+  const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
+  const b=new Blob([csv],{type:"text/csv"});const u=URL.createObjectURL(b);
+  const a=document.createElement("a");a.href=u;a.download="disputed_lines.csv";a.click();URL.revokeObjectURL(u);
+});
+window.__loaded=true;
+</script></body></html>
